@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>心理调查问卷</title>
+    <style>
+        /* 基础样式 */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: sans-serif; font-size: 18px; }
+        html, body { width: 100%; height: 100%; min-height: 100vh; background: #f7f8fa; display: flex; justify-content: center; align-items: center; padding: 10px; overflow: hidden; transition: filter 1s, background 1s; }
+        
+        /* 问卷盒子 */
+        .box { background: white; width: 100%; height: 100%; max-width: 600px; max-height: 90vh; padding: 25px 20px; border-radius: 12px; box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05); position: relative; z-index: 10; display: none; flex-direction: column; }
+        .title { font-size: 24px; margin-bottom: 15px; text-align: center; color: #333; font-weight: bold; }
+        .progress { text-align: center; font-size: 13px; color: #666; margin-bottom: 15px; }
+        .question { font-size: 18px; line-height: 1.6; color: #222; margin-bottom: 15px; min-height: 50px; }
+        .options { display: flex; flex-direction: column; gap: 12px; flex: 1; overflow-y: auto; }
+        .option { padding: 14px; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; background: #fff; transition: 0.2s; }
+        .option.selected { background: #dbdbdb; border-color: #aaa; }
+        .option.locked { background: #f2f2f2 !important; color: #999 !important; cursor: not-allowed !important; }
+        .btn-group { display: flex; justify-content: space-between; margin-top: 15px; }
+        .btn { padding: 12px 20px; border: none; border-radius: 6px; cursor: pointer; flex: 1; max-width: 120px; }
+        .prev-btn { background: #eee; margin-right: 10px; }
+        .next-btn { background: #555; color: #fff; }
+
+        /* 特殊遮罩与效果 */
+        .black-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; color: #ff0000; font-weight: bold; text-align: center; }
+        .terror-mask { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; color: #d80000; letter-spacing: 6px; }
+        .submit-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .submit-modal-inner { background: #fff; padding: 30px; border-radius: 12px; width: 320px; text-align: center; border: 2px solid #ccc; }
+        
+        /* 日记界面 */
+        .diary-wrap { display: none; width: 100%; height: 100%; max-width: 600px; max-height: 90vh; padding: 25px 20px; border-radius: 12px; background: #fff; box-shadow: 0 2px 15px rgba(0,0,0,0.1); flex-direction: column; position: relative; z-index: 10; }
+        .diary-content { margin-top: 20px; line-height: 2; color: #222; overflow-y: auto; }
+        .start-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; padding: 20px; border-radius: 12px; border: 2px solid #bbb; z-index: 10000; text-align: center; width: 280px; }
+    </style>
+</head>
+<body>
+
+    <div class="box" id="mainBox">
+        <div class="title">心理健康调查问卷</div>
+        <div class="progress" id="progress">第 1 题 / 共 30 题</div>
+        <div class="question" id="question"></div>
+        <div class="options" id="options"></div>
+        <div class="btn-group">
+            <button class="btn prev-btn" id="prevBtn">上一题</button>
+            <button class="btn next-btn" id="nextBtn">下一题</button>
+        </div>
+    </div>
+
+    <div class="diary-wrap" id="diaryWrap">
+        <div id="diaryPage">
+            <div style="color:#666; font-size: 14px;">04.26 永夜</div>
+            <div class="diary-content">
+                我不允许你拥有除我之外的一切...<br>
+                你的呼吸、身体、情绪都该属于我。<br>
+                乖乖留在我身边，永远只准看着我一个人。<br>
+                <span style="color:red; font-size:24px; font-weight:bold;">我爱你^_^</span>
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+                <button onclick="location.reload()" style="padding: 10px; border:none; background:#eee; border-radius:6px; cursor:pointer;">结束</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const questions = [
+            { q: "1. 独处待在房间时，你总觉得暗处有视线在盯着你吗？", opt: ["A. 经常会", "B. 偶尔察觉", "C. 几乎不会", "D. 完全没有"] },
+            { q: "2. 深夜关灯后，你会刻意回避看向镜子吗？", opt: ["A.一定会避开", "B.偶尔不敢看", "C.无所谓", "D.很喜欢直视"] },
+            { q: "30. 如果有陌生人默默记下了你所有喜好、习惯与小动作", opt: ["A.极致恐惧", "B.不安", "C.有点暖心", "D.十分期待"] }
+        ]; // 此处仅缩略演示，实际运行可补全至30题
+
+        let current = 0;
+        let answers = Array(questions.length).fill(null);
+        const mainBox = document.getElementById("mainBox");
+        const diaryWrap = document.getElementById("diaryWrap");
+
+        function renderQuestion() {
+            const q = questions[current];
+            document.getElementById("progress").innerText = `第 ${current + 1} 题 / 共 ${questions.length} 题`;
+            document.getElementById("question").innerText = q.q;
+            const optionsEl = document.getElementById("options");
+            optionsEl.innerHTML = "";
+            q.opt.forEach((item, idx) => {
+                const div = document.createElement("div");
+                div.className = "option" + (answers[current] === idx ? " selected" : "");
+                div.innerText = item;
+                div.onclick = () => {
+                    answers[current] = idx;
+                    renderQuestion();
+                };
+                optionsEl.appendChild(div);
+            });
+            document.getElementById("prevBtn").disabled = current === 0;
+            document.getElementById("nextBtn").innerText = current === questions.length - 1 ? "提交问卷" : "下一题";
+        }
+
+        document.getElementById("prevBtn").onclick = () => { if(current > 0) { current--; renderQuestion(); } };
+        document.getElementById("nextBtn").onclick = () => {
+            if(current < questions.length - 1) { current++; renderQuestion(); }
+            else { showFinalModal(); }
+        };
+
+        function showFinalModal() {
+            const modal = document.createElement("div");
+            modal.className = "submit-modal";
+            modal.innerHTML = `
+                <div class="submit-modal-inner">
+                    <div style="font-weight:bold; margin-bottom:15px;">问卷作答完毕</div>
+                    <div>有一封你的留言是否要查看？</div>
+                    <button class="btn next-btn" style="margin-top:15px; max-width:none; width:100%;" onclick="showInputModal(this.parentElement.parentElement)">是</button>
+                    <div style="color:red; font-size:10px; margin-top:5px;">不准拒绝^_^</div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function showInputModal(oldModal) {
+            oldModal.remove();
+            const modal = document.createElement("div");
+            modal.className = "submit-modal";
+            modal.innerHTML = `
+                <div class="submit-modal-inner">
+                    <div style="margin-bottom: 10px;">请输入指定文字解锁查看</div>
+                    <input type="text" id="loveInput" placeholder="请输入：我爱你" style="width:100%; padding:10px; margin-bottom:15px; border:1px solid #ccc; border-radius:8px;">
+                    <button class="btn next-btn" style="max-width:none; width:100%;" id="unlockBtn">继续</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            document.getElementById("unlockBtn").onclick = function() {
+                const val = document.getElementById("loveInput").value.trim();
+                if (val === "我爱你") {
+                    modal.remove();
+                    mainBox.style.display = "none";
+                    diaryWrap.style.display = "flex";
+                } 
+                else if (val === "我根本不爱你") {
+                    modal.remove();
+                    triggerBreakupEffect();
+                } 
+                else {
+                    modal.remove();
+                    blackPunish();
+                }
+            };
+        }
+
+        function triggerBreakupEffect() {
+            // 视觉破防
+            document.body.style.filter = "grayscale(100%)";
+            document.body.style.background = "#000";
+
+            const winLayer = document.createElement("div");
+            winLayer.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; z-index:1000000; color:#fff; background:rgba(0,0,0,0.8); transition:opacity 1s;";
+            winLayer.innerHTML = `
+                <div style="font-size: 24px; font-weight:bold; color:#00ff00; margin-bottom:20px;">恭喜你通关了XJ</div>
+                <div id="butLove" style="font-size: 18px; color:#ff4444; opacity:0; transition:opacity:1.5s;">但是我爱你</div>
+            `;
+            document.body.appendChild(winLayer);
+
+            setTimeout(() => { document.getElementById("butLove").style.opacity = "1"; }, 800);
+            
+            setTimeout(() => {
+                winLayer.style.opacity = "0";
+                setTimeout(() => {
+                    winLayer.remove();
+                    mainBox.style.display = "none";
+                    diaryWrap.style.display = "flex";
+                    diaryWrap.style.background = "#e0e0e0";
+                }, 1000);
+            }, 3500);
+        }
+
+        function blackPunish() {
+            const screen = document.createElement("div");
+            screen.className = "black-screen";
+            screen.innerText = "不要试图违背我^";
+            document.body.appendChild(screen);
+            setTimeout(() => {
+                screen.innerText = "再给你一次机会";
+                screen.style.color = "#ffffff";
+            }, 2000);
+            setTimeout(() => {
+                screen.remove();
+                showInputModal({remove:()=>{}});
+            }, 3500);
+        }
+
+        function openStartModal() {
+            const modal = document.createElement("div");
+            modal.className = "start-modal";
+            modal.innerHTML = `
+                <div><b>欢迎参与本次调查</b></div>
+                <div style="font-size:12px; color:red; margin:10px 0;">注：包含微恐效果，如有不适请停止</div>
+                <button class="btn next-btn" onclick="this.parentElement.remove(); mainBox.style.display='flex'; renderQuestion();">进入</button>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        openStartModal();
+    </script>
+</body>
+</html>
